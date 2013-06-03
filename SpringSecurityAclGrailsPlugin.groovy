@@ -23,6 +23,7 @@ import org.apache.log4j.Logger
 
 import org.codehaus.groovy.grails.commons.GrailsClassUtils as GCU
 import org.codehaus.groovy.grails.plugins.springsecurity.SpringSecurityUtils
+import org.codehaus.groovy.grails.plugins.springsecurity.acl.ClassLoaderPerProxyAnnotatedBeanAutoProxyCreator;
 import org.codehaus.groovy.grails.plugins.springsecurity.acl.ClassLoaderPerProxyBeanNameAutoProxyCreator
 import org.codehaus.groovy.grails.plugins.springsecurity.acl.GormAclLookupStrategy
 import org.codehaus.groovy.grails.plugins.springsecurity.acl.GormObjectIdentityRetrievalStrategy
@@ -76,7 +77,7 @@ import org.springframework.security.core.authority.GrantedAuthorityImpl
  */
 class SpringSecurityAclGrailsPlugin {
 
-	String version = '1.1.1'
+	String version = '1.2-SNAPSHOT'
 	String grailsVersion = '1.3 > *'
 	List loadAfter = ['springSecurityCore']
 	List pluginExcludes = [
@@ -126,8 +127,8 @@ class SpringSecurityAclGrailsPlugin {
 		configureExpressionBeans conf
 
 		// secured services
-		configureSecuredServices.delegate = delegate
-		configureSecuredServices conf, application
+		configureSecuredBeans.delegate = delegate
+		configureSecuredBeans conf, application
 
 		// MetadataSource
 		configureSecurityMetadataSource.delegate = delegate
@@ -210,7 +211,7 @@ class SpringSecurityAclGrailsPlugin {
 		}
 	}
 
-	private configureSecuredServices = { conf, application ->
+	private configureSecuredBeans = { conf, application ->
 
 		debug 'configuring secured services'
 
@@ -224,45 +225,11 @@ class SpringSecurityAclGrailsPlugin {
 			}
 		}
 
-		def serviceNames = []
-		for (serviceClass in application.serviceClasses) {
-			boolean hasSpringSecurityACL = GCU.isStaticProperty(serviceClass.clazz, 'springSecurityACL')
-			if (hasSpringSecurityACL || serviceIsAnnotated(serviceClass.clazz)) {
-				serviceNames << GrailsNameUtils.getPropertyNameRepresentation(serviceClass.clazz.name)
-			}
-		}
-
-		if (serviceNames) {
-			securedServicesInterceptor(ClassLoaderPerProxyBeanNameAutoProxyCreator) {
-				proxyTargetClass = true
-				beanNames = serviceNames
-				interceptorNames = ['methodSecurityInterceptor']
-			}
-		}
-	}
-
-	private boolean serviceIsAnnotated(Class clazz) {
-		for (annotation in [GrailsSecured, SpringSecured, PreAuthorize,
-		                    PreFilter, PostAuthorize, PostFilter]) {
-			if (serviceIsAnnotated(clazz, annotation)) {
-				return true
-			}
-		}
-		false
-	}
-
-	private boolean serviceIsAnnotated(Class clazz, Class annotation) {
-		if (clazz.isAnnotationPresent(annotation)) {
-			return true
-		}
-
-		for (Method method in clazz.methods) {
-			if (method.isAnnotationPresent(annotation)) {
-				return true
-			}
-		}
-
-		false
+		securedBeanInterceptor(ClassLoaderPerProxyAnnotatedBeanAutoProxyCreator) {
+            proxyTargetClass = true
+            interceptorNames = ['methodSecurityInterceptor']
+            grailsApplication = ref('grailsApplication')
+        }
 	}
 
 	private configureSecurityMetadataSource = { conf, voterConfig, application ->
